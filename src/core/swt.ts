@@ -144,7 +144,14 @@ export function strokeWidthTransform(
   const maxRay = Math.max(8, Math.round(Math.min(w, h) * MAX_RAY_FRACTION));
   const cosTol = Math.cos(ANGLE_TOLERANCE);
   const rays: number[][] = [];
-  const sign = darkOnLight ? 1 : -1;
+  /**
+   * Sign convention. The raw intensity gradient points from dark to light, i.e.
+   * OUTWARD from a dark stroke on a light ground. To walk INTO the stroke we need
+   * -grad for dark-on-light and +grad for light-on-dark. The same sign must then be
+   * applied at the far edge, or the opposing-gradient test compares two different
+   * conventions and never matches.
+   */
+  const sign = darkOnLight ? -1 : 1;
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -172,8 +179,11 @@ export function strokeWidthTransform(
         const g1y = s.gy.data[j] ?? 0;
         const n1 = Math.hypot(g1x, g1y);
         if (n1 < 1e-6) break;
-        // Opposing edge: the far gradient points back along the ray.
-        if ((dx * -(g1x / n1) + dy * -(g1y / n1)) >= cosTol) found = j;
+        // Opposing edge: the far gradient, under the SAME polarity convention,
+        // points back along the ray.
+        const f1x = (sign * g1x) / n1;
+        const f1y = (sign * g1y) / n1;
+        if (dx * -f1x + dy * -f1y >= cosTol) found = j;
         break;
       }
       if (found < 0) continue;
@@ -355,11 +365,20 @@ function lineToRegion(group: Component[]): TextRegion {
   const sdH = Math.sqrt(heights.reduce((a, v) => a + (v - meanH) ** 2, 0) / heights.length);
   const sdSW = Math.sqrt(sws.reduce((a, v) => a + (v - meanSW) ** 2, 0) / sws.length);
 
-  const swConsistency = 1 - Math.min(1, meanSW > 0 ? sdSW / meanSW : 1);
-  const sizeConsistency = 1 - Math.min(1, meanH > 0 ? sdH / meanH : 1);
-  const support = Math.min(1, group.length / 2);
+  /**
+   * A single-component group has zero variance, so a naive consistency score rates
+   * it PERFECT — which is how an isolated laptop graphic earned 0.88 confidence and
+   * outranked real headlines. There is nothing for one component to be consistent
+   * with, so consistency is scored neutral there and group support carries the
+   * weight instead: real text lines are several letters, lone components are almost
+   * always graphics.
+   */
+  const solitary = group.length < 2;
+  const swConsistency = solitary ? 0.5 : 1 - Math.min(1, meanSW > 0 ? sdSW / meanSW : 1);
+  const sizeConsistency = solitary ? 0.5 : 1 - Math.min(1, meanH > 0 ? sdH / meanH : 1);
+  const support = Math.min(1, group.length / 3);
   const confidence = Math.max(0, Math.min(1,
-    0.5 * swConsistency + 0.25 * sizeConsistency + 0.25 * support));
+    0.40 * swConsistency + 0.20 * sizeConsistency + 0.40 * support));
 
   return {
     x: x0, y: y0, w: x1 - x0, h: y1 - y0,
@@ -371,10 +390,42 @@ function lineToRegion(group: Component[]): TextRegion {
   };
 }
 
+/** Intersection-over-union of two axis-aligned boxes. */
+function iou(a: TextRegion, b: TextRegion): number {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const inter = ix * iy;
+  const union = a.w * a.h + b.w * b.h - inter;
+  return union > 0 ? inter / union : 0;
+}
+
 /**
- * Detect text lines. Runs both polarities (light-on-dark and dark-on-light, both
- * ubiquitous in thumbnails) and keeps whichever produces the stronger evidence,
- * scored as total confident text area. Returns regions largest-first.
+ * Greedy non-maximum suppression, ranked by confidence then by compactness.
+ * Deliberately NOT ranked by area: a big spurious blob would then beat a real
+ * headline, which is exactly how picking a polarity by total area went wrong.
+ */
+function suppress(regions: TextRegion[], overlap = 0.4): TextRegion[] {
+  const ranked = [...regions].sort(
+    (a, b) => b.confidence - a.confidence || b.w * b.h - a.w * a.h || a.x - b.x || a.y - b.y,
+  );
+  const kept: TextRegion[] = [];
+  for (const r of ranked) {
+    if (kept.some((k) => iou(k, r) > overlap)) continue;
+    kept.push(r);
+  }
+  return kept;
+}
+
+/**
+ * Detect text lines.
+ *
+ * Runs BOTH polarities and merges them rather than choosing one. Thumbnails
+ * routinely mix a dark headline with a light kicker, so picking a single polarity
+ * throws away half the text; and any "which pass won" heuristic based on area
+ * reliably prefers a large dark shape over real type. Overlapping duplicates —
+ * the same glyphs found from both directions — are suppressed by confidence.
+ *
+ * Returns regions largest-first.
  */
 export function detectTextSWT(b: Bitmap): TextRegion[] {
   // SWT is the expensive stage and its cost is linear in pixel count. Half the
@@ -407,10 +458,7 @@ export function detectTextSWT(b: Bitmap): TextRegion[] {
       .filter((r) => r.w > 0 && r.h > 0);
   };
 
-  const score = (rs: TextRegion[]) => rs.reduce((a, r) => a + r.w * r.h * r.confidence, 0);
-  const dark = run(true);
-  const light = run(false);
-  const chosen = score(light) > score(dark) ? light : dark;
+  const merged = suppress([...run(true), ...run(false)]);
 
-  return chosen.sort((a, b2) => b2.w * b2.h - a.w * a.h || a.x - b2.x || a.y - b2.y);
+  return merged.sort((a, b2) => b2.w * b2.h - a.w * a.h || a.x - b2.x || a.y - b2.y);
 }

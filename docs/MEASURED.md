@@ -4,25 +4,25 @@ Every number below was read off an actual run. Reproduce them by opening the too
 and clicking the named sample, or by opening `selftest.html`, which runs the whole
 table live in your browser.
 
-Recorded 2026-09-04 against commit `f74ea0d`, production build.
+Recorded 2026-09-04, production build, after the SWT polarity fix and the
+solitary-component confidence correction.
 
 ## Self-test — 6/6 samples land on their authored verdict
 
 | Sample | Authored | Score | Verdict | Repaired | Δ | Primary failure |
 |---|---|---|---|---|---|---|
-| `wall-of-text` | fail | **44** | fail | 44 | +0 | 97% of text area below 7 px |
-| `low-contrast` | fail | **44** | fail | **74** | **+30** | 1.27:1 contrast |
+| `wall-of-text` | fail | **44** | fail | 44 | +0 | 74% of text area below 7 px |
+| `low-contrast` | fail | **44** | fail | **74** | **+30** | 1.39:1 contrast |
 | `badge-collision` | fail | **44** | fail | 44 | +0 | 62.6% of a text block under the pill |
 | `detail-collapse` | fail | **44** | fail | 44 | +0 | SSIM 0.743; 3.7 px cap height |
 | `edge-bleed` | warn | **74** | warn | 74 | +0 | 10.3% past the safe margin |
-| `clean` | pass | **96** | pass | 96 | +0 | none |
+| `clean` | pass | **99** | pass | 99 | +0 | none |
 
 ## The repair demo (`low-contrast`, the boot sample)
 
 ```
 44  →  74        +30 points, no generative model involved
-4 failing        →  0 failing
-16 text regions  →  8 text regions
+failing checks   →  0
 ```
 
 - **Contrast scrim** — "Solved a 52% dark scrim behind 6 text blocks — the minimum that reaches 4.5:1."
@@ -30,7 +30,7 @@ Recorded 2026-09-04 against commit `f74ea0d`, production build.
 
 The scrim opacity is binary-searched, not guessed, and masked off the glyph pixels via
 a per-region Otsu cut — a scrim laid over everything scales foreground and background
-together and moves contrast from 1.27 to 1.31, which is a tint, not a fix.
+together and barely moves the ratio at all, which is a tint, not a fix.
 
 ## Where repair correctly refuses
 
@@ -62,7 +62,23 @@ dHash. Stacked in a sidebar they read as one video.
 | Full analysis, 1280×720, visible tab | **~250 ms** on-device |
 | First-paint payload, gzipped | **26.4 KB** (18.2 KB core + 4.1 KB app + 2.7 KB CSS + 2.0 KB HTML) |
 | Runtime dependencies | **0** |
-| Unit tests | **41 passing**, `tsc --noEmit` clean |
+| Unit tests | **122 passing**, `tsc --noEmit` clean |
+
+## Detector sanity — reported cap heights against the fonts that drew them
+
+Cap height is measured on the glyph box, so it sits a little above pure cap height when
+type is outlined. The point is that the numbers are in the right physical range:
+
+| Sample | Reported sidebar cap | Implied source cap | Font that drew it |
+|---|---|---|---|
+| `clean` | 15.5 px | ~118 px | 156 px Arial Black (cap ≈ 112 px) |
+| `edge-bleed` | 15.8 px | ~120 px | 150 px (cap ≈ 108 px) |
+| `badge-collision` | 19.2 px | ~146 px | 152 px (cap ≈ 110 px) |
+| `wall-of-text` | 9.5 px | ~72 px | 62 px outlined headline |
+| `detail-collapse` | 3.7 px | ~28 px | 15-21 px dashboard labels |
+
+Before the solitary-component fix, `wall-of-text` reported a 162 px source cap — it was
+measuring the laptop graphic, not the headline.
 
 ## Determinism, verified
 

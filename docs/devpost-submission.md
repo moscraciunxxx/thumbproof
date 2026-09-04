@@ -39,8 +39,8 @@ Every thumbnail tool I could find *generates*. None of them *verify*.
 ## What it does — with the numbers it actually prints
 
 Open it and it is already measuring a deliberately broken thumbnail: **44/100, "Will not
-survive delivery", 4 failing checks, measured on-device in ~250 ms.** Press one button and
-it becomes **74/100 with 0 failing checks.**
+survive delivery", measured on-device in ~250 ms.** Press one button and
+it becomes **74/100 with zero failing checks.**
 
 
 
@@ -62,11 +62,11 @@ Then it **repairs** it. Two deterministic fixes, both things a creator would do 
 hand, and it reports exactly what each one did:
 
 > **Contrast scrim** — Solved a 52% dark scrim behind 6 text blocks, the minimum that reaches 4.5:1.
-> **Punch-in recrop** — Recropped 28% tighter around your headline and attention peak, delivering the same type 1.39× larger (6.6px → 9.2px on the suggested sidebar).
+> **Punch-in recrop** — Declined: the headline already clears the comfort threshold, so cropping would cost framing without buying legibility.
 
 The opacity is binary-searched, not guessed. And it is masked off the glyph pixels via a
 per-region Otsu cut — my first version laid the scrim over everything, which scales
-foreground and background together and moved contrast from 1.27 to 1.31. That is a tint,
+foreground and background together and barely moved the ratio at all. That is a tint,
 not a fix. Masking it off the type is what turned repair from +0 into +30.
 
 Crucially, it also **refuses**. Two of the six samples are left untouched at 44, because
@@ -95,12 +95,12 @@ Pure TypeScript, **zero runtime dependencies**, classical computer vision, no ML
 - **dHash + quantised palette + ink-layout histogram** for the shelf test
 
 Deliberately no LLM anywhere in the pipeline. The whole value of the claim "your text
-is 6.6 px tall" is that it is a measurement — so the pipeline had to be deterministic
+is 3.7 px tall" is that it is a measurement — so the pipeline had to be deterministic
 end to end. Same pixels in, bit-identical numbers out, on any machine. The FNV-1a
 fingerprint printed under the score is of the exact pixels measured, so any result in
 the demo can be reproduced.
 
-Static site, no backend, no telemetry. **41 unit tests**, clean `tsc --noEmit`, **zero
+Static site, no backend, no telemetry. **122 unit tests**, clean `tsc --noEmit`, **zero
 runtime dependencies**, **26.4 KB gzipped** on first paint. Deployed to GitHub Pages via
 Actions, which typechecks and runs the suite before it will publish.
 
@@ -118,11 +118,29 @@ phone subtends 20.2° and is the *most forgiving* surface, not the least. The ho
 version is narrower and more interesting, and it is what the product now says.
 
 **My first scrim was a tint.** It darkened the glyphs along with the background, so
-contrast went 1.27 → 1.31 and the repair delta was zero. The fix — an Otsu cut per region
+the contrast ratio barely moved and the repair delta was zero. The fix — an Otsu cut per region
 so the scrim lands only on background pixels — is the difference between a feature that
 demos and a feature that works.
 
-**Three bugs that only surfaced by actually running it.** Boot awaited
+**Two detector bugs that only unit tests could have caught.** Writing direct tests for
+the Stroke Width Transform — synthetic bars of a known width, checked against the
+geometry that drew them — showed that I was applying the polarity sign when choosing the
+ray direction but comparing against the raw gradient at the far edge. The two ends of
+every ray used different conventions, so one of the two polarity passes found almost
+nothing. End-to-end calibration had hidden it completely, because the detector ran both
+passes and kept whichever won.
+
+Fixing that exposed a second one. With both passes working, choosing between them by
+total text area reliably preferred a big dark shape over real type: `wall-of-text` began
+reporting a 162 px cap height when its largest font is 62 px — it was measuring the
+laptop graphic. And that graphic scored 0.88 confidence because my formula rewarded
+stroke-width and size *consistency*, and a single isolated component has zero variance,
+so it looks perfectly consistent. Two fixes: merge both polarities instead of picking one
+(thumbnails routinely mix dark and light type), and score a solitary component neutrally
+so group support carries the weight. Reported cap heights are now within a few per cent
+of the fonts that drew them.
+
+**Three more bugs that only surfaced by actually running it.** Boot awaited
 `requestAnimationFrame`, which never fires in a background tab, so opening the link in a
 background tab left it blank forever. Re-rendering the wall never released canvas backing
 stores, and WebKit budgets *total* canvas area per page, so tiles would have silently

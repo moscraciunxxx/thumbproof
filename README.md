@@ -83,8 +83,8 @@ in your own browser rather than asking you to trust a README.
 | | |
 |---|---|
 | Self-test | **6/6** samples land on the verdict they were authored to get |
-| Repair demo | **44 → 74**, 4 failing checks → **0** |
-| Unit tests | **41 passing**, `tsc --noEmit` clean |
+| Repair demo | **44 → 74**, failing checks → **0** |
+| Unit tests | **122 passing**, `tsc --noEmit` clean |
 | Analysis | **~250 ms** on-device, 1280×720 |
 | First paint | **26.4 KB** gzipped, **zero** runtime dependencies |
 
