@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ThumbProof — measure what survives delivery</title>
+<meta name="description" content="You design a thumbnail at 1280px. The suggested sidebar delivers 168, and a TV at 3m is angularly no bigger. ThumbProof measures what survives, on-device, and repairs it." />
+<meta property="og:title" content="ThumbProof" />
+<meta property="og:description" content="Designed at 1280 px. Delivered at 168 in the sidebar. Measure what survives." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d10'/%3E%3Crect x='5' y='9' width='22' height='13' rx='2' fill='%2340dcff'/%3E%3Crect x='9' y='13' width='14' height='5' rx='1' fill='%230b0d10'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+<header class="top">
+  <div class="top__brand">
+    <h1>ThumbProof</h1>
+    <p class="top__thesis">You design at <b>1280&nbsp;px</b>. The suggested sidebar delivers <b>168</b> — and a living-room TV at 3&nbsp;m is angularly no bigger. Those are the two surfaces you never check. This measures what survives, on your device. No upload, no API key.</p>
+  </div>
+  <div class="top__score" id="score"></div>
+</header>
+
+<main>
+  <section class="bar" aria-label="Choose a thumbnail">
+    <div class="bar__samples">
+      <span class="bar__lead">Try one:</span>
+      <div id="samples" class="chips"></div>
+    </div>
+    <div class="bar__drop">
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/*" hidden />
+        <span class="drop__text"><b>Drop your own thumbnail</b><span>or click to choose · never leaves this machine</span></span>
+      </label>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="wall-h">
+    <div class="panel__head">
+      <h2 id="wall-h">Delivered, at true size</h2>
+      <p>Every tile below is rendered at the exact CSS pixel box that surface uses, downscaled through the same Lanczos filter the analysis measures, with YouTube's duration pill and progress bar stamped on top. Nothing here is a CSS shrink of a big image.</p>
+    </div>
+    <div id="wall"></div>
+  </section>
+
+  <section class="panel panel--split" aria-labelledby="checks-h">
+    <div>
+      <div class="panel__head">
+        <h2 id="checks-h">What was measured</h2>
+        <p>Each row is a number with a stated threshold. Recompute it yourself from the source — same pixels always give the same answer.</p>
+      </div>
+      <ul id="checks" class="checks"></ul>
+    </div>
+    <div>
+      <div class="panel__head">
+        <h2>What the tool saw</h2>
+        <p><span class="key key--text"></span> detected text lines with cap height &nbsp; <span class="key key--peak"></span> attention peak &nbsp; <span class="key key--badge"></span> duration-pill keep-out</p>
+      </div>
+      <div id="diagnostic" class="diagnostic"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="repair-h">
+    <div class="panel__head">
+      <h2 id="repair-h">Repair it</h2>
+      <p>Two deterministic fixes, both things you would do by hand: solve the minimum scrim opacity that reaches WCAG&nbsp;4.5:1, and recrop 16:9 tighter so the same type is delivered larger. No generative model touches your pixels.</p>
+      <button id="repair" class="btn" type="button">Repair &amp; re-measure</button>
+    </div>
+    <div id="repairOut" class="repair"></div>
+    <div id="repairWall"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="shelf-h">
+    <div class="panel__head">
+      <h2 id="shelf-h">The shelf test</h2>
+      <p>A thumbnail is never seen alone — it sits in a column with your own back catalogue. Nailing a house style quietly destroys your distinctiveness, and nothing tells you. This compares structure (dHash), colour identity, and where the busy regions sit.</p>
+    </div>
+    <div id="shelfStrip" class="strip"></div>
+    <div id="shelf" class="shelf"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p><b>ThumbProof</b> runs entirely in your browser. No upload, no account, no API key, no model weights. Every number is reproducible from the source image — the fingerprint under the score is a hash of the exact pixels measured.</p>
+  <p class="foot__links">
+    <a id="repoLink" href="https://github.com/moscraciunxxx/thumbproof">Source &amp; tests</a>
+    <a href="https://github.com/moscraciunxxx/thumbproof/blob/main/docs/surfaces.md">Where the numbers come from</a>
+    <a href="./selftest.html">Run the self-test</a>
+  </p>
+</footer>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

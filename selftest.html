@@ -1,0 +1,56 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ThumbProof — self-test</title>
+<style>body{background:#0b0d10;color:#e8edf4;font:12px ui-monospace,monospace;padding:16px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid #262c35}
+th{color:#6b7684;font-weight:500}.ok{color:#3ddc97}.bad{color:#ff5c62}.warn{color:#ffc857}
+h2{font-size:13px;margin:18px 0 6px;color:#40dcff}</style></head><body>
+<h1 style="font:600 16px system-ui;color:#e8edf4;margin:0 0 4px">ThumbProof self-test</h1>
+<p style="color:#9aa6b5;max-width:80ch;margin:0 0 14px;font:12px system-ui;line-height:1.5">
+Six sample thumbnails were each authored to fail in exactly one way, plus one authored to pass.
+This page runs the real analyser over all of them in your browser, right now, and checks whether
+each lands on the verdict it was written to get. It is the project's own regression test, run live
+rather than asserted in a README. <a href="/" style="color:#40dcff">Back to the tool</a>.</p>
+<h2>Verdicts</h2>
+<div id="out">running…</div>
+<script type="module">
+import { SAMPLES, BACK_CATALOGUE, svgToDataUrl } from '/src/fixtures/samples.ts';
+import { analyze } from '/src/core/analyze.ts';
+import { repair } from '/src/core/repair.ts';
+import { signature, shelfTest } from '/src/core/shelf.ts';
+import { normalizeTo16x9 } from '/src/ui/bitmap.ts';
+
+function load(svg){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('decode'));i.src=svgToDataUrl(svg);});}
+const band = s => s>=75?'pass':s>=45?'warn':'fail';
+const rows = [];
+for (const s of SAMPLES){
+  const bmp = normalizeTo16x9(await load(s.svg));
+  const r = analyze(bmp);
+  const rep = repair(bmp, r);
+  const after = analyze(rep.bitmap);
+  const got = band(r.score);
+  rows.push({id:s.id, expect:s.expect, score:r.score, got, ok:got===s.expect,
+    repaired:after.score, delta:after.score-r.score, regions:r.textRegions.length,
+    ms:r.elapsedMs,
+    fails:r.checks.filter(c=>c.status==='fail').map(c=>c.id).join(', ')||'—',
+    all:r.checks.map(c=>`${c.status[0].toUpperCase()} ${c.id}=${c.value}`).join('  |  ')});
+}
+// shelf test on the catalogue
+const catBmps = [];
+for (const c of BACK_CATALOGUE) catBmps.push({id:c.id, bmp: normalizeTo16x9(await load(c.svg))});
+const sigs = catBmps.map(c=>signature(c.id,c.bmp));
+const selfTest = shelfTest(sigs[0], sigs.slice(1));
+const cleanBmp = normalizeTo16x9(await load(SAMPLES.find(s=>s.id==='clean').svg));
+const cleanVsCat = shelfTest(signature('clean', cleanBmp), sigs);
+
+let html = '<table><tr><th>sample</th><th>expect</th><th>score</th><th>got</th><th>ok</th><th>repaired</th><th>Δ</th><th>lines</th><th>ms</th><th>failing checks</th></tr>';
+for (const r of rows) html += `<tr><td>${r.id}</td><td>${r.expect}</td><td>${r.score}</td><td class="${r.got==='pass'?'ok':r.got==='warn'?'warn':'bad'}">${r.got}</td><td class="${r.ok?'ok':'bad'}">${r.ok?'YES':'NO'}</td><td>${r.repaired}</td><td class="${r.delta>0?'ok':''}">${r.delta>=0?'+':''}${r.delta}</td><td>${r.regions}</td><td>${r.ms}</td><td style="color:#9aa6b5">${r.fails}</td></tr>`;
+html += '</table>';
+html += '<h2>Every check, every sample</h2>';
+for (const r of rows) html += `<div style="margin:6px 0"><b style="color:#40dcff">${r.id}</b> <span style="color:#9aa6b5">${r.all}</span></div>`;
+html += `<h2>Shelf test</h2><table>
+<tr><td>catalogue-1 vs its own 4 siblings</td><td class="${selfTest.distinctiveness<25?'ok':'bad'}">distinctiveness ${selfTest.distinctiveness} (want LOW)</td><td>nearest ${selfTest.nearest.id} @ ${selfTest.nearest.similarity}%, ${selfTest.nearest.dhashHamming}/64 bits</td></tr>
+<tr><td>clean vs the 5-entry catalogue</td><td class="${cleanVsCat.distinctiveness>=50?'ok':'bad'}">distinctiveness ${cleanVsCat.distinctiveness} (want HIGH)</td><td>nearest ${cleanVsCat.nearest.id} @ ${cleanVsCat.nearest.similarity}%</td></tr></table>`;
+const pass = rows.filter(r=>r.ok).length;
+html += `<h2>${pass}/${rows.length} samples land on their authored verdict</h2>`;
+document.getElementById('out').innerHTML = html;
+window.__calib = {rows, selfTest, cleanVsCat};
+</script></body></html>

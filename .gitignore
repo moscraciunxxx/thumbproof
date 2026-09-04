@@ -1,0 +1,8 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Working notes: competitive analysis of other entrants and judging-path scratch.
+# Not part of the deliverable and not appropriate in a public repo.
+_intake/
