@@ -75,6 +75,28 @@ Pure TypeScript, zero runtime dependencies. Classical computer vision, no ML:
 Because none of that is stochastic, the whole pipeline is deterministic — which is the
 only reason a claim like "your text is 6.3 px tall" is worth anything.
 
+## Measured results
+
+Full table in [`docs/MEASURED.md`](docs/MEASURED.md). `selftest.html` reproduces it live
+in your own browser rather than asking you to trust a README.
+
+| | |
+|---|---|
+| Self-test | **6/6** samples land on the verdict they were authored to get |
+| Repair demo | **44 → 74**, 4 failing checks → **0** |
+| Unit tests | **41 passing**, `tsc --noEmit` clean |
+| Analysis | **~250 ms** on-device, 1280×720 |
+| First paint | **26.4 KB** gzipped, **zero** runtime dependencies |
+
+Determinism is checked rather than asserted: the same image yields the same FNV-1a
+fingerprint and the same score under the dev server and the production bundle
+(`51e3852f3cea8e6e` → `c9e442c3293a91a1`). Two different builds, identical results.
+
+It also **refuses** where it should. Two of the six samples are left untouched, because
+their text runs corner to corner and no 16:9 crop delivers it larger without dropping
+part of it — an editorial problem, not a mechanical one. The tool says so rather than
+inventing a win.
+
 ## Verify locally
 
 ```bash
@@ -85,7 +107,8 @@ npm ci && npm test
 npm run build
 ```
 
-`npm run dev` is for editing. The judged door is the GitHub Pages URL at the top.
+`npm run dev` is for editing. The judged door is the GitHub Pages URL at the top, and
+`/selftest.html` there runs the whole sample suite in front of you.
 
 ## Where the numbers come from
 

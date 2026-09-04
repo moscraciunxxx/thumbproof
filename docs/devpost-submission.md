@@ -1,7 +1,7 @@
 # Devpost submission — ThumbProof
 
-> Draft. Numbers marked `<N>` must be replaced with values read off a real run
-> before submitting. Do not ship a claim the tool does not print.
+> All numbers below are read off real runs and cross-checked in `docs/MEASURED.md`,
+> which `selftest.html` reproduces live in the reader's own browser.
 
 **Project name:** ThumbProof
 
@@ -36,7 +36,13 @@ duration badge, and a composition so busy it turns to mush on the downscale.
 
 Every thumbnail tool I could find *generates*. None of them *verify*.
 
-## What it does
+## What it does — with the numbers it actually prints
+
+Open it and it is already measuring a deliberately broken thumbnail: **44/100, "Will not
+survive delivery", 4 failing checks, measured on-device in ~250 ms.** Press one button and
+it becomes **74/100 with 0 failing checks.**
+
+
 
 Drop a thumbnail in and ThumbProof renders it at the true CSS pixel box of five
 delivery surfaces — mobile feed, mobile search, desktop grid, desktop sidebar, TV —
@@ -53,15 +59,29 @@ number against a stated threshold:
 - content past the safe margin
 
 Then it **repairs** it. Two deterministic fixes, both things a creator would do by
-hand: binary-search the minimum scrim opacity that lifts the headline to 4.5:1, and
-compute the tightest 16:9 recrop that still contains the headline and the attention
-peak so the same type is delivered larger. It re-scores in front of you and reports
-exactly what the trade bought.
+hand, and it reports exactly what each one did:
+
+> **Contrast scrim** — Solved a 52% dark scrim behind 6 text blocks, the minimum that reaches 4.5:1.
+> **Punch-in recrop** — Recropped 28% tighter around your headline and attention peak, delivering the same type 1.39× larger (6.6px → 9.2px on the suggested sidebar).
+
+The opacity is binary-searched, not guessed. And it is masked off the glyph pixels via a
+per-region Otsu cut — my first version laid the scrim over everything, which scales
+foreground and background together and moved contrast from 1.27 to 1.31. That is a tint,
+not a fix. Masking it off the type is what turned repair from +0 into +30.
+
+Crucially, it also **refuses**. Two of the six samples are left untouched at 44, because
+their text runs corner to corner and no 16:9 crop delivers it larger without dropping
+part of it. The tool says exactly that rather than pretending: *"This one cannot be fixed
+by cropping — it needs fewer, bigger words."* Their problems are editorial and
+compositional, and a tool that claimed to fix those mechanically would be lying.
 
 Finally, the **shelf test**: a thumbnail is never seen alone. Compare it against your
 own back catalogue on structure (dHash), colour identity (quantised palette) and where
 the busy regions sit (ink-layout histogram). It tells you when you have accidentally
-made the same thumbnail five times — the thing a house style quietly does to you.
+made the same thumbnail five times — the thing a house style quietly does to you. The
+five back-catalogue samples score **0 distinctiveness, 0 of 64 dHash bits apart**: built
+from one template, they are bit-identical under a perceptual hash. Stacked in a sidebar
+they read as one video.
 
 ## How I built it
 
@@ -75,15 +95,40 @@ Pure TypeScript, **zero runtime dependencies**, classical computer vision, no ML
 - **dHash + quantised palette + ink-layout histogram** for the shelf test
 
 Deliberately no LLM anywhere in the pipeline. The whole value of the claim "your text
-is `<N>` px tall" is that it is a measurement — so the pipeline had to be deterministic
+is 6.6 px tall" is that it is a measurement — so the pipeline had to be deterministic
 end to end. Same pixels in, bit-identical numbers out, on any machine. The FNV-1a
 fingerprint printed under the score is of the exact pixels measured, so any result in
 the demo can be reproduced.
 
-Static site, no backend, no telemetry. Tested with vitest and deployed to GitHub Pages
-via Actions, which typechecks and runs the suite before it will publish.
+Static site, no backend, no telemetry. **41 unit tests**, clean `tsc --noEmit`, **zero
+runtime dependencies**, **26.4 KB gzipped** on first paint. Deployed to GitHub Pages via
+Actions, which typechecks and runs the suite before it will publish.
+
+The determinism claim is checked, not asserted: the same image yields the same FNV-1a
+fingerprint and the same score under the dev server and the production bundle
+(`51e3852f3cea8e6e` → `c9e442c3293a91a1`). And `selftest.html` re-runs the analyser over
+all six samples in the reader's own browser: **6/6 land on the verdict they were authored
+to get.**
 
 ## Challenges
+
+**The research overturned my own pitch.** I set out to build this around "you design at
+1280 and everyone sees 168." Working out the actual visual angles killed that claim: the
+phone subtends 20.2° and is the *most forgiving* surface, not the least. The honest
+version is narrower and more interesting, and it is what the product now says.
+
+**My first scrim was a tint.** It darkened the glyphs along with the background, so
+contrast went 1.27 → 1.31 and the repair delta was zero. The fix — an Otsu cut per region
+so the scrim lands only on background pixels — is the difference between a feature that
+demos and a feature that works.
+
+**Three bugs that only surfaced by actually running it.** Boot awaited
+`requestAnimationFrame`, which never fires in a background tab, so opening the link in a
+background tab left it blank forever. Re-rendering the wall never released canvas backing
+stores, and WebKit budgets *total* canvas area per page, so tiles would have silently
+stopped painting on iOS. And the text detector counted solid blobs as text — silhouettes
+report a stroke width equal to their own height — which had one 3-word thumbnail
+reporting 26 text lines until I added a stroke-width-to-height floor.
 
 Making the wall **honest** was harder than making it look right. The obvious approach —
 render the thumbnail big and CSS-scale it down — flatters the image, because the
@@ -108,6 +153,11 @@ was empty, and verification is where the unglamorous, repeated, expensive mistak
 Batch mode across a whole channel export; a real face detector so "attention on
 subject" can distinguish a face from a bright background; a headless CLI so this can
 run as a pre-upload gate in CI.
+
+## Try it in ten seconds
+
+Open the link. No sign-up, no API key, nothing to install, and the first sample is already
+measured when the page paints. `selftest.html` proves the analyser on all six samples live.
 
 ## Honest limits
 
