@@ -2,6 +2,8 @@
 
 import type { Bitmap } from '../core/types';
 import { svgToDataUrl } from '../fixtures/samples';
+import { cropRect } from '../core/image';
+import { fetchBestThumbnail, type YtVariant } from '../core/ytimg';
 
 export function canvasToBitmap(c: HTMLCanvasElement): Bitmap {
   const ctx = c.getContext('2d', { willReadFrequently: true });
@@ -72,4 +74,59 @@ export async function fileToBitmap(file: File): Promise<Bitmap> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * Strip letterbox bars from a 4:3 YouTube raster.
+ *
+ * `sddefault`, `hqdefault` and `default` are 4:3, and YouTube pads a 16:9 upload
+ * into them with black bars top and bottom. Measuring those directly would treat the
+ * padding as artwork: contrast, saliency and the delivered cap-height ratio would all
+ * be computed against a frame that is a third taller than the one a viewer sees.
+ *
+ * Detects the bars by scanning inward for the first row that is not near-black,
+ * rather than assuming an exact 16:9 inset — YouTube's padding is not always exact.
+ */
+export function cropLetterbox(b: Bitmap, threshold = 18): Bitmap {
+  const rowIsDark = (y: number): boolean => {
+    for (let x = 0; x < b.width; x += 4) {
+      const i = (y * b.width + x) * 4;
+      if ((b.rgba[i] ?? 0) > threshold || (b.rgba[i + 1] ?? 0) > threshold || (b.rgba[i + 2] ?? 0) > threshold) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  let top = 0;
+  while (top < b.height - 1 && rowIsDark(top)) top++;
+  let bottom = b.height - 1;
+  while (bottom > top && rowIsDark(bottom)) bottom--;
+
+  const h = bottom - top + 1;
+  // Refuse to "fix" a thumbnail that is simply dark at the edges.
+  if (h < b.height * 0.5 || h === b.height) return b;
+  return cropRect(b, 0, top, b.width, h);
+}
+
+/**
+ * Load a real thumbnail for a YouTube video id, best raster first.
+ * Public CDN, no API key, no account, and nothing is sent anywhere — the image is
+ * fetched straight into a canvas on the viewer's own machine.
+ */
+export async function bitmapFromYouTube(id: string): Promise<{ bitmap: Bitmap; variant: YtVariant }> {
+  const variant = await fetchBestThumbnail(id);
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error(`Could not load ${variant.name} for ${id}`));
+    im.src = variant.url;
+  });
+
+  const raw = normalizeTo16x9(img, img.naturalWidth, img.naturalHeight);
+  // 4:3 rungs carry letterbox padding; strip it before anything measures the frame.
+  const aspect = img.naturalWidth / img.naturalHeight;
+  const cleaned = aspect < 1.6 ? cropLetterbox(raw) : raw;
+  return { bitmap: normalizeTo16x9(bitmapToCanvas(cleaned)), variant };
 }

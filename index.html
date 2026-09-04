@@ -25,6 +25,16 @@
       <span class="bar__lead">Try one:</span>
       <div id="samples" class="chips"></div>
     </div>
+    <div class="bar__yt">
+      <label class="yt" for="ytUrl">
+        <span class="yt__lead">Or audit a real video</span>
+        <span class="yt__row">
+          <input type="url" id="ytUrl" class="yt__input" placeholder="paste any youtube.com or youtu.be link" spellcheck="false" autocomplete="off" />
+          <button type="button" id="ytGo" class="btn btn--sm">Fetch</button>
+        </span>
+        <span class="yt__note">Pulls the real thumbnail from YouTube's public image CDN, straight into this page. No API key, no sign-in, nothing uploaded.</span>
+      </label>
+    </div>
     <div class="bar__drop">
       <label class="drop" id="drop">
         <input type="file" id="file" accept="image/*" hidden />
@@ -67,7 +77,39 @@
       <button id="repair" class="btn" type="button">Repair &amp; re-measure</button>
     </div>
     <div id="repairOut" class="repair"></div>
+    <div id="downloads" class="downloads"></div>
     <div id="repairWall"></div>
+
+    <div class="panel__head panel__head--sub">
+      <h3>Then what should I change?</h3>
+      <p>Most thumbnails fail for reasons no raster edit can fix — you wrote fourteen lines of copy, or the composition is too busy to survive a downscale. Every item below is arithmetic on the measurements: where it says <em>move it 84&nbsp;px left</em>, 84 is the computed distance that clears the pill.</p>
+    </div>
+    <div id="advice"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="ab-h">
+    <div class="panel__head">
+      <h2 id="ab-h">Pick between variants</h2>
+      <p>Creators do not make one thumbnail, they make three and guess. Drop two to four here and they are all measured against the same thresholds, ranked by what survives delivery rather than by what looks best at full size.</p>
+      <label class="drop drop--sm" id="abDrop">
+        <input type="file" id="abFile" accept="image/*" multiple hidden />
+        <span class="drop__text"><b>Drop 2–4 variants</b><span>or click to choose · compared side by side at true size</span></span>
+      </label>
+    </div>
+    <div id="abOut"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="feed-h">
+    <div class="panel__head">
+      <h2 id="feed-h">The column you actually compete in</h2>
+      <p>The shelf test compares you against your own back catalogue. But your thumbnail appears in a suggested rail beside <em>other channels</em>, all rendered at 168&nbsp;px, all fighting for the same glance. Paste the videos yours will sit next to and it ranks the column — including how far you sit from its average, because the same red that wins in a muted column loses in a red one.</p>
+      <span class="yt__row">
+        <input type="text" id="rivalUrls" class="yt__input yt__input--wide" placeholder="paste 2–8 YouTube links, separated by spaces or newlines" spellcheck="false" autocomplete="off" />
+        <button type="button" id="rivalGo" class="btn btn--sm">Build the column</button>
+      </span>
+    </div>
+    <div id="feedStrip" class="strip"></div>
+    <div id="feedOut"></div>
   </section>
 
   <section class="panel" aria-labelledby="shelf-h">
@@ -77,6 +119,12 @@
     </div>
     <div id="shelfStrip" class="strip"></div>
     <div id="shelf" class="shelf"></div>
+  </section>
+  <section class="panel" aria-labelledby="model-h">
+    <details id="modelWrap">
+      <summary class="model__summary"><h2 id="model-h">How this score is computed</h2><span>open the arithmetic</span></summary>
+      <div id="model"></div>
+    </details>
   </section>
 </main>
 

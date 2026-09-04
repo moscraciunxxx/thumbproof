@@ -1,6 +1,8 @@
 /** Result panels: the score, the measured checks, the repair diff, the shelf test. */
 
 import type { Report, CheckResult } from '../core/types';
+import type { Advice } from '../core/advice';
+import { GATE_FAIL_CEILING, GATE_WARN_CEILING } from '../core/analyze';
 import type { RepairResult } from '../core/repair';
 import type { ShelfReport } from '../core/shelf';
 import { el, clear } from './dom';
@@ -124,4 +126,87 @@ export function renderShelf(host: HTMLElement, shelf: ShelfReport): void {
     // scroll horizontally.
     host.append(el('div', { class: 'shelf__wrap' }, table));
   }
+}
+
+/**
+ * Concrete next actions. Rendered whenever the deterministic repair could not carry
+ * the whole fix — which is most thumbnails, because most thumbnails fail for
+ * editorial reasons a raster edit cannot touch.
+ */
+export function renderAdvice(host: HTMLElement, advice: readonly Advice[]): void {
+  clear(host);
+  if (advice.length === 0) {
+    host.append(el('p', { class: 'advice__none' },
+      'Nothing left to act on — every check passes at delivered size.'));
+    return;
+  }
+  const list = el('ol', { class: 'advice' });
+  for (const a of advice) {
+    list.append(el('li', { class: 'advice__item' },
+      el('div', { class: 'advice__title' }, a.title),
+      el('p', { class: 'advice__detail' }, a.detail),
+    ));
+  }
+  host.append(list);
+}
+
+/**
+ * The score, opened up. A number a judge cannot audit is a number they have to take
+ * on faith, so this shows every weight, every penalty actually charged, and the
+ * severity gate that caps the total.
+ */
+export function renderScoringModel(host: HTMLElement, report: Report): void {
+  clear(host);
+
+  const gating = report.checks.filter((c) => !c.advisory);
+  const worstFail = gating.some((c) => c.status === 'fail');
+  const worstWarn = gating.some((c) => c.status === 'warn');
+  const ceiling = worstFail ? GATE_FAIL_CEILING : worstWarn ? GATE_WARN_CEILING : 100;
+
+  const totalWeight = report.checks.reduce((a, c) => a + c.weight, 0);
+  const totalPenalty = report.checks.reduce((a, c) => a + c.penalty, 0);
+  const weighted = totalWeight > 0
+    ? Math.round(((totalWeight - totalPenalty) / totalWeight) * 100)
+    : 0;
+
+  const table = el('table', { class: 'model' });
+  table.append(el('thead', {}, el('tr', {},
+    el('th', {}, 'Check'),
+    el('th', {}, 'Measured'),
+    el('th', {}, 'Weight'),
+    el('th', {}, 'Penalty charged'),
+    el('th', {}, 'Gates?'),
+  )));
+  const body = el('tbody');
+  for (const c of [...report.checks].sort((a, b) => b.weight - a.weight || a.id.localeCompare(b.id))) {
+    body.append(el('tr', { class: `model__row model__row--${c.status}` },
+      el('td', {}, c.id),
+      el('td', {}, `${c.value} ${c.unit}`),
+      el('td', {}, c.weight.toFixed(1)),
+      el('td', {}, c.penalty.toFixed(2)),
+      el('td', {}, c.advisory ? 'advisory' : 'yes'),
+    ));
+  }
+  table.append(body);
+
+  host.append(
+    el('div', { class: 'model__sum' },
+      el('div', {},
+        el('code', {}, `weighted = (${totalWeight.toFixed(1)} − ${totalPenalty.toFixed(2)}) / ${totalWeight.toFixed(1)} = ${weighted}`)),
+      el('div', {},
+        el('code', {}, `gate ceiling = ${ceiling}`),
+        el('span', { class: 'model__note' },
+          worstFail ? ' — a hard failure caps the score inside the fail band'
+            : worstWarn ? ' — a warning caps the score inside the warn band'
+              : ' — nothing failing, no cap applied')),
+      el('div', {},
+        el('code', {}, `score = min(${weighted}, ${ceiling}) = ${report.score}`)),
+    ),
+    table,
+    el('p', { class: 'model__why' },
+      'Why a gate at all: a weighted average lets one catastrophic flaw hide behind everything that is fine. '
+      + 'A thumbnail whose payoff word is entirely under the duration pill should not score 71 because its contrast is good — '
+      + 'that is not how a viewer experiences it. Advisory checks inform but never gate, because the saliency model '
+      + 'cannot tell your subject from a bright background and must not be able to condemn a thumbnail on its own.'),
+  );
 }

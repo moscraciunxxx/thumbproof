@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><title>real-input harness</title>
+<style>body{background:#0b0d10;color:#e8edf4;font:11px ui-monospace,monospace;padding:12px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:3px 8px 3px 0;border-bottom:1px solid #262c35}
+th{color:#6b7684}canvas{border:1px solid #333;margin:4px 0}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+figure{margin:0 0 10px}figcaption{color:#9aa6b5;font-size:10px;margin-top:3px}</style></head><body>
+<div id="sum">loading real thumbnails…</div><div id="out" class="row"></div>
+<script type="module">
+import { detectTextSWT } from '/src/core/swt.ts';
+import { analyze } from '/src/core/analyze.ts';
+import { normalizeTo16x9, bitmapToCanvas } from '/src/ui/bitmap.ts';
+const IDS = ["67zh8_yiPh4","aQZkra1kEcg","Q15paKSGIS8","7D6KyFZ5NyU","lxpaSlImFHk","XUkNR-JfHwo","s47C9_qDvJs","pFhVQo0YPyw","DJ4wg4eM1-o","UEHdYNXiIUU","2bjWvJ1SyJ8","IVx8OSMbTss","huyDp-zWpxg","eF2I9mfajyc"];
+function load(url){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>rej(new Error('load'));i.src=url;});}
+const rows=[]; const out=document.getElementById('out');
+for (const id of IDS){
+  let img=null;
+  for (const v of ['maxresdefault','hq720','hqdefault']){
+    try{ const im=await load(`https://i.ytimg.com/vi/${id}/${v}.jpg`); if(im.naturalWidth>320){img=im;break;} }catch(e){}
+  }
+  if(!img){ rows.push({id,err:'no thumb'}); continue; }
+  const bmp = normalizeTo16x9(img);
+  const t0=performance.now(); const regions=detectTextSWT(bmp); const tDet=Math.round(performance.now()-t0);
+  const t1=performance.now(); const rep=analyze(bmp); const tAll=Math.round(performance.now()-t1);
+  const conf=regions.filter(r=>r.confidence>=0.5);
+  rows.push({id, w:img.naturalWidth, regions:regions.length, conf:conf.length, score:rep.score, tDet, tAll,
+    maxCap:conf.length?Math.max(...conf.map(r=>r.capHeightPx)).toFixed(0):0,
+    fails:rep.checks.filter(c=>c.status==='fail').map(c=>c.id).join(' ')||'—'});
+  // overlay
+  const c=bitmapToCanvas(bmp); c.style.width='300px'; c.style.height='169px';
+  const x=c.getContext('2d');
+  conf.forEach(r=>{x.strokeStyle='#40dcff';x.lineWidth=4;x.strokeRect(r.x,r.y,r.w,r.h);});
+  const f=document.createElement('figure'); f.append(c);
+  f.append(Object.assign(document.createElement('figcaption'),{textContent:`${id} · ${conf.length} lines · score ${rep.score} · ${tAll}ms`}));
+  out.append(f);
+}
+const ok=rows.filter(r=>!r.err);
+const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)];};
+document.getElementById('sum').innerHTML =
+ `<h3>${ok.length}/${IDS.length} real thumbnails analysed — median ${med(ok.map(r=>r.conf))} text lines, median ${med(ok.map(r=>r.tAll))}ms, median score ${med(ok.map(r=>r.score))}</h3>`+
+ '<table><tr><th>id</th><th>src w</th><th>raw</th><th>conf lines</th><th>max cap</th><th>score</th><th>det ms</th><th>total ms</th><th>failing</th></tr>'+
+ rows.map(r=>r.err?`<tr><td>${r.id}</td><td colspan=8>${r.err}</td></tr>`:
+  `<tr><td>${r.id}</td><td>${r.w}</td><td>${r.regions}</td><td>${r.conf}</td><td>${r.maxCap}</td><td>${r.score}</td><td>${r.tDet}</td><td>${r.tAll}</td><td style="color:#9aa6b5">${r.fails}</td></tr>`).join('')+'</table>';
+window.__rows=rows;
+</script></body></html>

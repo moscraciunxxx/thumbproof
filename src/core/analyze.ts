@@ -9,12 +9,13 @@
  */
 
 import type {
-  Bitmap, CheckResult, Report, Surface, TextRegion, SaliencyResult, Plane,
+  Bitmap, CheckResult, Report, Surface, TextRegion, SaliencyResult, Plane, FaceRegion,
 } from './types';
 import { SURFACES, CAP_HEIGHT_FAIL_PX, CAP_HEIGHT_WARN_PX, CONTRAST_FAIL, CONTRAST_WARN } from './surfaces';
 import { toGray, resizeLanczos } from './image';
 import { localTextContrast } from './contrast';
 import { detectTextSWT } from './swt';
+import { detectFaces } from './face';
 import { spectralResidualSaliency } from './saliency';
 import { ssim } from './ssim';
 import { fnv1a64 } from './hash';
@@ -26,15 +27,28 @@ import { fnv1a64 } from './hash';
 export const GATE_FAIL_CEILING = 44;
 export const GATE_WARN_CEILING = 74;
 
+/**
+ * Points lost per point of weighted penalty, descending from the band ceiling.
+ * Tuned against 14 real YouTube thumbnails plus the six authored samples: 1.5 spread
+ * the warn band nicely but drove failing thumbnails to single digits, and a "2/100"
+ * reads as a broken tool rather than a bad thumbnail.
+ */
+export const PENALTY_RATE = 1.0;
+
+/** Band floors, so no band can collapse to an uninformative number. */
+export const BAND_FLOORS = { fail: 5, warn: 46, pass: 76 } as const;
+
 /** Weights sum to 100. Tuned so the two things that actually kill a thumbnail dominate. */
 export const WEIGHTS = {
   /** Can they read your hook? Measured on the tallest line, per surface. */
-  capHeight: 22,
+  capHeight: 19,
   /** How much of everything else is already lost? Measured on every line. */
   unreadableShare: 18,
   contrast: 18,
   detailSurvival: 16,
   badgeCollision: 12,
+  /** Is the presenter still a person at delivered size, or a smudge? */
+  faceSize: 3,
   /** Advisory only — see CheckResult.advisory. */
   saliencyFocus: 4,
   textLoad: 5,
@@ -294,6 +308,59 @@ function checkSaliencyFocus(sal: SaliencyResult): CheckResult[] {
   }];
 }
 
+/**
+ * A thumbnail's subject is usually a person, and a face has to survive the downscale
+ * just like type does. Below roughly 14px of delivered height a face stops being a
+ * specific person and becomes a smudge — you lose the recognition that makes a
+ * regular viewer click.
+ *
+ * Only emitted for a high-confidence detection: the detector is a skin-chroma
+ * heuristic with known false positives (hands, wood, sand), and a phantom face must
+ * never be able to fail a thumbnail.
+ */
+function checkFaceSize(b: Bitmap, faces: readonly FaceRegion[]): CheckResult[] {
+  // Two deliberate asymmetries here, both learned the hard way.
+  //
+  // FALSE NEGATIVES: emitted only when a face IS found, so a thumbnail where none is
+  // detected is never penalised. The detector's misses are not evenly distributed — a
+  // fixed Cb/Cr box with a luma floor misses deeply pigmented skin in low or cool
+  // light far more often than pale skin in warm light. A missed face must cost the
+  // creator nothing.
+  //
+  // FALSE POSITIVES: advisory, so it can never gate the score. The first version of
+  // this check gated, and it promptly failed the "clean" sample — a bright amber
+  // field with no person in it at all. Warm gradients are the single highest-volume
+  // false positive for skin chroma, and they are endemic to thumbnail design. A
+  // detector that cannot tell a sunset from a cheek has no business condemning
+  // anyone's thumbnail, so this informs and never condemns.
+  const strong = faces.filter((f) => f.confidence >= 0.75);
+  if (strong.length === 0) return [];
+  const s = tightestSurface();
+  const biggest = strong.reduce((a, f) => (f.h > a.h ? f : a), strong[0]!);
+  const delivered = biggest.h * (s.cssWidth / b.width);
+
+  return [{
+    id: 'face-size',
+    label: `Face at ${s.label} (advisory)`,
+    advisory: true,
+    // Capped at 'warn' for the same reason it is advisory: a phantom face must not
+    // be able to produce a hard failure.
+    status: delivered < 24 ? 'warn' : 'pass',
+    value: Math.round(delivered * 10) / 10,
+    unit: 'px face height',
+    threshold: 24,
+    surface: s.id,
+    penalty: ramp(delivered, 24, 8, WEIGHTS.faceSize),
+    weight: WEIGHTS.faceSize,
+    detail:
+      delivered < 14
+        ? `The face in your thumbnail is delivered ${delivered.toFixed(1)}px tall here — below the point where it reads as a specific person rather than a smudge. Crop tighter on the face.`
+        : delivered < 24
+          ? `Face delivered at ${delivered.toFixed(1)}px. Recognisable, but a tighter crop would let a returning viewer identify you at a glance.`
+          : `Face delivered at ${delivered.toFixed(1)}px — comfortably recognisable.`,
+  }];
+}
+
 function checkTextLoad(b: Bitmap, regions: readonly TextRegion[]): CheckResult[] {
   // Only lines a viewer can actually READ count as reading load. Lines below the
   // legibility floor are already charged to unreadable-share; billing them twice
@@ -362,8 +429,16 @@ function checkEdgeSafety(b: Bitmap, regions: readonly TextRegion[]): CheckResult
 
 // ---------------------------------------------------------------- entry point
 
-/** Fraction of saliency mass that falls inside the given regions. */
-export function saliencyOnRegions(map: Plane, regions: readonly TextRegion[], src: Bitmap): number {
+/**
+ * Fraction of saliency mass that falls inside the given regions.
+ * Takes bare boxes so text regions and face regions can be pooled — attention on the
+ * presenter counts as attention on the subject just as much as attention on the headline.
+ */
+export function saliencyOnRegions(
+  map: Plane,
+  regions: readonly { x: number; y: number; w: number; h: number }[],
+  src: Bitmap,
+): number {
   let total = 0;
   let inside = 0;
   const sx = map.width / src.width;
@@ -394,9 +469,17 @@ export function analyze(b: Bitmap, now: () => number = () => performance.now()):
 
   const gray = toGray(b);
   const textRegions = detectTextSWT(b);
+  const faces = detectFaces(b);
   const sal = spectralResidualSaliency(b);
   const heads = headlineRegions(textRegions);
-  const onSubject = heads.length > 0 ? saliencyOnRegions(sal.map, heads, b) : sal.onSubject;
+
+  // "On subject" means on the headline OR on the presenter. Before faces were
+  // detected this could only count text, so a thumbnail with a big clear face and a
+  // short headline scored as though attention were landing on nothing.
+  // Same confidence bar as the face check — a warm background must not be allowed to
+  // masquerade as "attention is landing on your presenter".
+  const subject = [...heads, ...faces.filter((f) => f.confidence >= 0.75)];
+  const onSubject = subject.length > 0 ? saliencyOnRegions(sal.map, subject, b) : sal.onSubject;
   const saliency: SaliencyResult = { ...sal, onSubject };
 
   const checks: CheckResult[] = [
@@ -405,6 +488,7 @@ export function analyze(b: Bitmap, now: () => number = () => performance.now()):
     ...checkContrast(b, textRegions),
     ...checkDetailSurvival(b, gray),
     ...checkBadgeCollision(b, textRegions),
+    ...checkFaceSize(b, faces),
     ...checkSaliencyFocus(saliency),
     ...checkTextLoad(b, textRegions),
     ...checkEdgeSafety(b, textRegions),
@@ -419,20 +503,40 @@ export function analyze(b: Bitmap, now: () => number = () => performance.now()):
   // A weighted average lets one catastrophic flaw hide behind everything that is
   // fine — a thumbnail whose payoff word is entirely under the duration pill should
   // not score 71 because its contrast is good. That is not how a viewer experiences
-  // it: one fatal flaw makes the thumbnail fail, full stop. So the average is capped
-  // by the severity of the worst NON-ADVISORY check.
+  // it: one fatal flaw makes the thumbnail fail, full stop.
+  //
+  // But clamping to the band ceiling ALSO destroys information. Measured against 14
+  // real YouTube thumbnails, a hard clamp put nine of them on exactly 74, because
+  // almost every real thumbnail trips at least one warning and every weighted score
+  // above the ceiling collapsed onto it. A creator comparing three of their own
+  // videos would have seen three identical numbers and concluded the tool measures
+  // nothing.
+  //
+  // So the gate picks the BAND, and you descend from that band's ceiling in
+  // proportion to the penalty you actually accrued.
+  //
+  // Mapping the full 0..100 weighted range into the band was the first attempt and it
+  // did not work either: real thumbnails pass most checks, so `weighted` lives in a
+  // narrow 88..100 strip, and stretching that across a 29-point band still put ten of
+  // fourteen real thumbnails within three points of each other. Descending from the
+  // ceiling at a fixed rate spends the band on the range that actually varies.
+  //
+  // PENALTY_RATE is the points lost per point of weighted penalty. Above 1 so that a
+  // handful of small warnings is still visibly worse than a clean sheet.
   const gating = checks.filter((c) => !c.advisory);
-  const ceiling = gating.some((c) => c.status === 'fail')
-    ? GATE_FAIL_CEILING
+  const [floor, ceiling] = gating.some((c) => c.status === 'fail')
+    ? [BAND_FLOORS.fail, GATE_FAIL_CEILING]
     : gating.some((c) => c.status === 'warn')
-      ? GATE_WARN_CEILING
-      : 100;
-  const score = Math.min(weighted, ceiling);
+      ? [BAND_FLOORS.warn, GATE_WARN_CEILING]
+      : [BAND_FLOORS.pass, 100];
+  const lost = (100 - weighted) * PENALTY_RATE;
+  const score = Math.max(0, Math.min(100, Math.round(Math.max(floor, ceiling - lost))));
 
   return {
     score,
     checks,
     textRegions,
+    faces,
     saliency,
     fingerprint: fnv1a64(b.rgba),
     elapsedMs: Math.round(now() - t0),

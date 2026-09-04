@@ -92,6 +92,13 @@ export interface CheckResult {
   advisory?: boolean;
 }
 
+/** A face-like region. Defined in face.ts; re-declared here to avoid a cycle. */
+export interface FaceRegion {
+  x: number; y: number; w: number; h: number;
+  confidence: number;
+  skinRatio: number;
+}
+
 export interface SaliencyResult {
   map: Plane;
   peak: { x: number; y: number };
@@ -104,6 +111,8 @@ export interface Report {
   score: number;
   checks: CheckResult[];
   textRegions: TextRegion[];
+  /** Face-like regions. Skin-chroma heuristic, not a trained detector — see face.ts. */
+  faces: FaceRegion[];
   saliency: SaliencyResult;
   /** Deterministic 16-hex-char digest of the input pixels. Same image ⇒ same hash, always. */
   fingerprint: string;
