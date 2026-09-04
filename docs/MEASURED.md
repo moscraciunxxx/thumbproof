@@ -80,6 +80,39 @@ type is outlined. The point is that the numbers are in the right physical range:
 Before the solitary-component fix, `wall-of-text` reported a 162 px source cap — it was
 measuring the laptop graphic, not the headline.
 
+## Validation on real JPEG content
+
+Every bundled sample is SVG-drawn, so the detector was also checked against a real
+JPEG: a two-colour gradient with film grain and lens blur, real anti-aliased Arial
+Black with an outline, encoded by ffmpeg at two quality levels. Regenerate with:
+
+```bash
+ffmpeg -f lavfi -i "gradients=s=1280x720:c0=0x123a5e:c1=0xe0642c:x0=120:y0=80:x1=1180:y1=700:nb_colors=2:d=1" \
+  -frames:v 1 -vf "noise=alls=14:allf=t+u,gblur=sigma=1.1,drawtext=..." -q:v 3 real-photo-hq.jpg
+```
+
+**Cap-height accuracy against the fonts that drew the type:**
+
+| Element | Font | True cap height (~0.72 em) | Detected | Error |
+|---|---|---|---|---|
+| Headline | 148 px Arial Black | ~106 px | **106 px** | <1% |
+| Kicker | 58 px Arial Bold | ~42 px | **44 px** | ~5% |
+| Subtitle | 30 px Arial Bold | ~22 px | **20 px** | ~9% |
+
+Contrast measured 10.48:1 for white-with-black-outline over the gradient, and
+detail-survival 0.954. Repair correctly declined both steps: the type already clears
+4.5:1 and the comfort threshold.
+
+### A sensitivity worth knowing about
+
+The same frame at high and low JPEG quality scored **74** and **99**. The measurements
+barely moved — `unreadable-share` 20% vs 14%, both around the 20% warn line — but the
+band gate turns a marginal warning into a 25-point headline swing, because compression
+artifacts nudge fine text edges and change how the subtitle line is segmented.
+
+This is inherent to any banded score and it is why the per-check numbers, not the
+headline score, are the ground truth. Read the rows.
+
 ## Determinism, verified
 
 The same image produces the same FNV-1a fingerprint and the same score under the dev

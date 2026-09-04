@@ -182,4 +182,5 @@ measured when the page paints. `selftest.html` proves the analyser on all six sa
 - SWT finds *where* text is and how tall it is; it does not read it. Stylised type can be mis-segmented.
 - Spectral-residual saliency is bottom-up and does not know what a face is. It is not a CTR predictor.
 - Delivered box sizes are responsive and vary by platform version and A/B bucket; the values used are representative and sourced in `docs/surfaces.md`, with an explicit "what we do not know" section.
+- The headline score is **banded**, so a measurement sitting on a threshold can move it between bands: the same frame at two JPEG qualities scored 74 and 99 while the underlying numbers barely moved. The per-check rows are the ground truth.
 - **This measures legibility, not clickthrough.** A perfectly legible thumbnail can still be a bad thumbnail. What it rules out is the failure you cannot see from your own desk.

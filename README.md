@@ -121,6 +121,7 @@ sourced fact, it is marked as one in both the memo and the code.
 - Text detection is SWT, not OCR. It finds *where* text is and how tall it is; it does not read it. Highly stylised or heavily outlined type can be under- or over-segmented.
 - Saliency is a 2007 bottom-up model. It predicts where the eye goes on contrast and novelty. It does not know what a face is, and it is not a CTR predictor.
 - Delivered box sizes are responsive and change with viewport, platform version and A/B bucket. The values used are representative, not universal.
+- The headline score is **banded**, so a measurement sitting on a threshold can move it between bands. The same frame at two JPEG qualities scored 74 and 99 while the underlying numbers barely moved. The per-check rows are the ground truth; the score is a summary.
 - **This measures legibility, not clickthrough.** A perfectly legible thumbnail can still be a bad thumbnail. What ThumbProof rules out is the failure mode you cannot see from your own desk.
 
 ## License
