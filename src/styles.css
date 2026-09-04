@@ -394,3 +394,41 @@ details[open] .model__summary span::before { content: '▾ '; }
   .ab__card { max-width: 100%; }
   .ab__card canvas { width: 100%; height: auto; }
 }
+
+/* ---------------------------------------------------------------- narrow screens */
+
+/*
+ * On a phone the 400px TV tile and the 360px feed tile are wider than the viewport.
+ * They must NOT be scaled to fit: the whole claim of this panel is that each tile is
+ * the true delivered size, and shrinking it to fit a phone would quietly turn the
+ * evidence into a picture of the evidence. So the wall scrolls sideways instead, and
+ * says so.
+ */
+@media (max-width: 760px) {
+  .wall {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    padding-bottom: 10px;
+    /* Bleed to the screen edges so it reads as a scrollable rail. */
+    margin-inline: calc(clamp(16px, 4vw, 44px) * -1);
+    padding-inline: clamp(16px, 4vw, 44px);
+  }
+  .tile { flex: 0 0 auto; scroll-snap-align: start; }
+  .wall::after {
+    content: '';
+    flex: 0 0 1px;
+  }
+  .panel--split { gap: 26px; }
+  .strip { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 8px; }
+  .strip figure { flex: 0 0 auto; }
+}
+
+.wall__hint {
+  display: none;
+  color: var(--ink-3);
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+@media (max-width: 760px) { .wall__hint { display: block; } }
