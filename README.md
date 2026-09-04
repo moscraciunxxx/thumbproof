@@ -12,6 +12,22 @@ No upload. No account. No API key. No model weights. Nothing leaves the browser.
 
 ---
 
+## Paste a YouTube link
+
+The fastest way to see whether any of this is true is on your own thumbnail:
+
+```
+https://moscraciunxxx.github.io/thumbproof/?v=YOUR_VIDEO_ID
+```
+
+`i.ytimg.com` serves with CORS enabled, so the real thumbnail is pulled straight into
+the canvas on your machine — no API key, no sign-in, nothing uploaded, no backend.
+The 4:3 rungs of YouTube's derivative ladder letterbox a 16:9 upload, so those bars
+are detected and stripped before anything measures the frame.
+
+That `?v=` URL is also a permalink: it reproduces the exact result, which is the only
+honest way to share one without uploading someone else's image.
+
 ## What a judge should see
 
 1. **Open the URL.** It boots on a deliberately broken thumbnail and the score is already on screen — no clicking, no setup, no sign-in.
@@ -52,6 +68,24 @@ Nothing measures this. Thumbnail tools generate; they do not verify.
 | **Text load** | Number of distinct text lines a viewer is asked to read in a scroll | 3 |
 | **Edge safety** | Content past the 4% safe margin that surface crops will shave | 0.5% |
 
+## Beyond one thumbnail
+
+- **Pick between variants.** Drop two to four and they are ranked on what survives
+  delivery, not on what looks strongest at full size — which is the one size no
+  viewer ever sees them at.
+- **The column you actually compete in.** The shelf test compares you against your
+  own back catalogue. This one ranks you against the *other channels* you appear
+  beside at 168 px, including how far you sit from the column average — the same red
+  that wins in a muted rail loses in a red one.
+- **Then what should I change?** Most thumbnails fail for reasons no raster edit can
+  fix. Every suggestion is arithmetic on the measurements: the pixels that clear the
+  duration pill, the cap height that reaches the floor, which text blocks deliver
+  nothing.
+- **Take the result with you.** The repaired PNG, and a JSON record of every
+  measurement with its threshold, weight and penalty.
+- **Open the arithmetic.** The score panel shows every weight, every penalty charged,
+  and the severity gate. A number nobody can audit is a number taken on faith.
+
 ## What it repairs
 
 Two fixes, both things a creator would do by hand, neither involving a generative model:
@@ -71,6 +105,7 @@ Pure TypeScript, zero runtime dependencies. Classical computer vision, no ML:
 - **SSIM** (Wang et al., 2004) for detail survival
 - **WCAG 2.1** relative luminance and contrast ratio, with **Otsu** thresholding to separate text from its local background
 - **dHash + quantised palette + ink-layout histogram** for the shelf test
+- **YCbCr skin chroma + morphology** for face-like regions (Chai & Ngan, 1999)
 
 Because none of that is stochastic, the whole pipeline is deterministic — which is the
 only reason a claim like "your text is 6.3 px tall" is worth anything.
@@ -97,6 +132,12 @@ their text runs corner to corner and no 16:9 crop delivers it larger without dro
 part of it — an editorial problem, not a mechanical one. The tool says so rather than
 inventing a win.
 
+## Demo
+
+`demo/thumbproof-demo.mp4` — 56 seconds, no narration. Every number on screen is
+real output from the modules in this repo, rendered by `demo/reel.html` and encoded
+with ffmpeg, not mocked up in a design tool.
+
 ## Verify locally
 
 ```bash
@@ -119,6 +160,12 @@ sourced fact, it is marked as one in both the memo and the code.
 ## Honest limits
 
 - Text detection is SWT, not OCR. It finds *where* text is and how tall it is; it does not read it. Highly stylised or heavily outlined type can be under- or over-segmented.
+- **Face detection is a skin-chroma heuristic, not a trained detector**, and it is
+  advisory for that reason — it once failed the `clean` sample on a bright amber
+  field, because warm gradients are the highest-volume false positive for skin
+  chroma and are endemic to thumbnail design. Just as important, it never penalises a
+  thumbnail where *no* face is found: its misses are not evenly distributed across
+  skin tones, so a missed face must cost the creator nothing.
 - Saliency is a 2007 bottom-up model. It predicts where the eye goes on contrast and novelty. It does not know what a face is, and it is not a CTR predictor.
 - Delivered box sizes are responsive and change with viewport, platform version and A/B bucket. The values used are representative, not universal.
 - The headline score is **banded**, so a measurement sitting on a threshold can move it between bands. The same frame at two JPEG qualities scored 74 and 99 while the underlying numbers barely moved. The per-check rows are the ground truth; the score is a summary.

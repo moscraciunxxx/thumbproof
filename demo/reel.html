@@ -1,0 +1,267 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ThumbProof reel</title>
+<style>body{background:#111;color:#ddd;font:12px ui-monospace,monospace;padding:10px}canvas{border:1px solid #333;width:640px}</style>
+</head><body>
+<div id="log">preparing…</div><canvas id="stage" width="1280" height="720"></canvas>
+<script type="module">
+import { SAMPLES, svgToDataUrl } from '/src/fixtures/samples.ts';
+import { analyze } from '/src/core/analyze.ts';
+import { repair } from '/src/core/repair.ts';
+import { advise } from '/src/core/advice.ts';
+import { rankFeed } from '/src/core/feed.ts';
+import { normalizeTo16x9, bitmapToCanvas, bitmapFromYouTube } from '/src/ui/bitmap.ts';
+import { renderSurfaceTile } from '/src/ui/wall.ts';
+import { SURFACES } from '/src/core/surfaces.ts';
+
+const FPS = 12, W = 1280, H = 720;
+const stage = document.getElementById('stage'), g = stage.getContext('2d');
+const log = m => document.getElementById('log').textContent = m;
+const INK='#e8edf4', DIM='#9aa6b5', FAINT='#6b7684', BG='#0b0d10',
+      PASS='#3ddc97', WARN='#ffc857', FAIL='#ff5c62', ACC='#40dcff';
+
+function loadSvg(svg){return new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>j(new Error('svg'));i.src=svgToDataUrl(svg);});}
+const ease = t => t<0?0:t>1?1:t*t*(3-2*t);
+function txt(s,x,y,{size=24,weight=400,color=INK,font='-apple-system,Helvetica,Arial,sans-serif',align='left',alpha=1}={}){
+  g.save(); g.globalAlpha=alpha; g.fillStyle=color; g.textAlign=align;
+  g.font=`${weight} ${size}px ${font}`; g.fillText(s,x,y); g.restore();
+}
+const mono = "ui-monospace,Menlo,monospace";
+
+// ---------- real data, computed once before any frame is drawn ----------
+log('analysing…');
+const bySample = {};
+for (const id of ['low-contrast','wall-of-text','clean']) {
+  const s = SAMPLES.find(x=>x.id===id);
+  const bmp = normalizeTo16x9(await loadSvg(s.svg));
+  const rep = analyze(bmp);
+  bySample[id] = { bmp, rep };
+}
+const lc = bySample['low-contrast'];
+const fixed = repair(lc.bmp, lc.rep);
+const fixedRep = analyze(fixed.bitmap);
+const adviceList = advise(bySample['wall-of-text'].bmp, bySample['wall-of-text'].rep);
+
+// one real YouTube thumbnail, with a graceful fallback
+let real = null;
+try {
+  const got = await bitmapFromYouTube('67zh8_yiPh4');
+  real = { bmp: got.bitmap, rep: analyze(got.bitmap), variant: got.variant };
+} catch (e) { real = { bmp: bySample['wall-of-text'].bmp, rep: bySample['wall-of-text'].rep, variant:null }; }
+
+// competing column, from real thumbnails
+let feed = null;
+try {
+  const ids = ['Q15paKSGIS8','lxpaSlImFHk','s47C9_qDvJs','DJ4wg4eM1-o'];
+  const items = [{ id:'yours', bitmap: real.bmp }];
+  for (const id of ids) { try { items.push({id, bitmap:(await bitmapFromYouTube(id)).bitmap}); } catch(e){} }
+  if (items.length >= 3) feed = { result: rankFeed(items,'yours'), items };
+} catch(e){}
+
+const surf = id => SURFACES.find(s=>s.id===id);
+const tileFor = (bmp,id) => renderSurfaceTile(bmp, surf(id));
+const tiles = {
+  mobile: tileFor(real.bmp,'mobile-feed'),
+  tv: tileFor(real.bmp,'tv'),
+  side: tileFor(real.bmp,'desktop-sidebar'),
+};
+const capOf = (rep,bmp,sid) => {
+  const heads = rep.textRegions.filter(r=>r.confidence>=0.5);
+  if(!heads.length) return 0;
+  const tall = heads.reduce((a,r)=>r.capHeightPx>a.capHeightPx?r:a,heads[0]);
+  return tall.capHeightPx * (surf(sid).cssWidth / bmp.width);
+};
+
+// ---------- scenes ----------
+function bg(){ g.fillStyle=BG; g.fillRect(0,0,W,H); g.fillStyle='#1b2029'; g.fillRect(0,0,W,4); }
+
+function sceneTitle(t){
+  bg();
+  const a=ease(t/0.8);
+  txt('ThumbProof',80,300,{size:82,weight:700,alpha:a});
+  txt('You design at 1280 px.',80,372,{size:32,color:DIM,alpha:ease((t-0.5)/0.8)});
+  txt('The suggested sidebar delivers 168.',80,416,{size:32,color:INK,weight:600,alpha:ease((t-1.1)/0.8)});
+  txt('A TV at 3 m is angularly no bigger. Those are the two surfaces you never check.',
+      80,470,{size:22,color:FAINT,alpha:ease((t-1.9)/0.9)});
+  txt('Every number below is measured on-device. No API key. No model weights.',
+      80,640,{size:19,color:ACC,alpha:ease((t-2.6)/0.9)});
+}
+
+function sceneWall(t){
+  bg();
+  txt('The same thumbnail, at the sizes it is actually delivered',80,90,{size:30,weight:600});
+  txt(real.variant?`real thumbnail · ${real.variant.name} · fetched from YouTube's public CDN`:'sample thumbnail',
+      80,126,{size:18,color:FAINT,font:mono});
+  const specs=[
+    {c:tiles.tv,   label:'TV, at 3 m',              dims:'400×225 px', sid:'tv'},
+    {c:tiles.mobile,label:'Mobile home feed',        dims:'360×202 px', sid:'mobile-feed'},
+    {c:tiles.side, label:'Desktop suggested sidebar',dims:'168×94 px',  sid:'desktop-sidebar'},
+  ];
+  let x=90; const y=260;
+  // All captions sit on ONE baseline below the tallest tile. Anchoring each to its
+  // own tile put the short sidebar caption level with the middle of its taller
+  // neighbour, so they collided.
+  const maxH=Math.max(...specs.map(s=>parseInt(s.c.style.height)));
+  const capY=y+maxH+42;
+  specs.forEach((s,i)=>{
+    const a=ease((t-i*0.7)/0.9);
+    if(a<=0){ x+=s.c.width/ (window.devicePixelRatio||1) + 60; return; }
+    const w=parseInt(s.c.style.width), h=parseInt(s.c.style.height);
+    g.save(); g.globalAlpha=a;
+    txt(s.label,x,y-34,{size:19,weight:600,alpha:a});
+    txt(s.dims,x,y-13,{size:14,color:FAINT,font:mono,alpha:a});
+    g.fillStyle='#0f0f0f'; g.fillRect(x-8,y-8,w+16,h+16);
+    g.drawImage(s.c,x,y,w,h);
+    const cap=capOf(real.rep,real.bmp,s.sid);
+    const col = cap<7?FAIL:cap<11?WARN:PASS;
+    const verdict = cap<7?'unreadable':cap<11?'effortful':'reads clean';
+    const caption=`${cap.toFixed(1)}px · ${verdict}`;
+    const last=i===specs.length-1;
+    const ca=ease((t-i*0.7-0.5)/0.7);
+    // The rightmost tile is narrow and its caption is not, so that one is anchored
+    // to the right margin instead of to its tile.
+    if(last) txt(caption,W-90,capY,{size:19,color:col,font:mono,weight:600,align:'right',alpha:ca});
+    else txt(caption,x,capY,{size:19,color:col,font:mono,weight:600,alpha:ca});
+    g.restore();
+    x+=w+60;
+  });
+  txt('Downscaled through the same Lanczos filter the analysis measures, with YouTube’s duration pill composited on top.',
+      90,660,{size:18,color:FAINT,alpha:ease((t-2.6)/1)});
+}
+
+function sceneChecks(t){
+  bg();
+  txt('Every row is a number with a stated threshold',80,90,{size:30,weight:600});
+  txt('no adjectives, no model opinion — recompute any of them from the source',80,126,{size:18,color:FAINT,font:mono});
+  const rows=[...real.rep.checks].sort((a,b)=>({fail:0,warn:1,pass:2})[a.status]-({fail:0,warn:1,pass:2})[b.status] || b.weight-a.weight).slice(0,9);
+  rows.forEach((c,i)=>{
+    const a=ease((t-i*0.28)/0.6); if(a<=0) return;
+    const y=200+i*52;
+    const col=c.status==='fail'?FAIL:c.status==='warn'?WARN:PASS;
+    g.save(); g.globalAlpha=a;
+    g.fillStyle='#12151a'; g.fillRect(80,y-28,1120,44);
+    g.fillStyle=col; g.beginPath(); g.arc(104,y-6,9,0,Math.PI*2); g.fill();
+    g.fillStyle=BG; g.font='700 13px '+mono; g.textAlign='center';
+    g.fillText(c.status==='pass'?'✓':c.status==='warn'?'!':'✕',104,-1+y);
+    g.textAlign='left';
+    txt(c.label,130,y+1,{size:19,weight:600,alpha:a});
+    txt(`${c.value} ${c.unit}`,1180,y+1,{size:18,color:col,font:mono,align:'right',alpha:a});
+    g.restore();
+  });
+}
+
+function sceneRepair(t){
+  bg();
+  txt('Repair, then re-measure',80,90,{size:30,weight:600});
+  txt('minimum scrim opacity solved for and masked off the glyphs, plus a punch-in recrop',80,126,{size:18,color:FAINT,font:mono});
+  const before=bitmapToCanvas(lc.bmp), after=bitmapToCanvas(fixed.bitmap);
+  const w=520,h=293;
+  g.drawImage(before,80,190,w,h);
+  txt('before',80,180,{size:17,color:FAINT,font:mono});
+  const a=ease((t-1.2)/1.1);
+  if(a>0){ g.save(); g.globalAlpha=a; g.drawImage(after,680,190,w,h); g.restore();
+    txt('after',680,180,{size:17,color:FAINT,font:mono,alpha:a}); }
+  const p=ease((t-1.6)/1.6);
+  const shown=Math.round(lc.rep.score+(fixedRep.score-lc.rep.score)*p);
+  const col = shown>=75?PASS:shown>=45?WARN:FAIL;
+  txt(String(lc.rep.score),80,590,{size:56,color:FAIL,font:mono,weight:700});
+  txt('→',210,590,{size:40,color:FAINT,font:mono});
+  txt(String(shown),270,590,{size:56,color:col,font:mono,weight:700,alpha:ease((t-1.6)/0.5)});
+  txt('no generative model touched the pixels',400,584,{size:21,color:DIM,alpha:ease((t-2.4)/0.8)});
+  if(fixed.steps[0]) txt(fixed.steps[0].detail.slice(0,96),80,646,{size:17,color:FAINT,alpha:ease((t-2.8)/0.8)});
+}
+
+function sceneAdvice(t){
+  bg();
+  txt('When no raster edit can fix it, say what to change',80,90,{size:30,weight:600});
+  txt('arithmetic on the measurements, not advice-shaped prose',80,126,{size:18,color:FAINT,font:mono});
+  adviceList.slice(0,3).forEach((ad,i)=>{
+    const a=ease((t-i*0.85)/0.9); if(a<=0) return;
+    const y=210+i*150;
+    g.save(); g.globalAlpha=a;
+    g.fillStyle='#12151a'; g.fillRect(80,y-34,1120,126);
+    g.fillStyle=ACC; g.beginPath(); g.arc(112,y-2,15,0,Math.PI*2); g.fill();
+    g.fillStyle=BG; g.font='700 16px '+mono; g.textAlign='center'; g.fillText(String(i+1),112,y+4); g.textAlign='left';
+    txt(ad.title,146,y+4,{size:22,weight:650,alpha:a});
+    const words=ad.detail.split(' '); let line='',ln=0;
+    for(const w2 of words){ const test=line?line+' '+w2:w2;
+      if(g.measureText(test).width>1000 && ln<2){ txt(line,146,y+36+ln*26,{size:17,color:DIM,alpha:a}); line=w2; ln++; }
+      else line=test; }
+    if(ln<3) txt(line.slice(0,110),146,y+36+ln*26,{size:17,color:DIM,alpha:a});
+    g.restore();
+  });
+}
+
+function sceneFeed(t){
+  bg();
+  txt('The column you actually compete in',80,90,{size:30,weight:600});
+  txt('not your own back catalogue — the other channels you appear beside, at 168 px',80,126,{size:18,color:FAINT,font:mono});
+  if(!feed){ txt('(needs network)',80,300,{size:22,color:FAINT}); return; }
+  feed.result.entries.forEach((e,i)=>{
+    const a=ease((t-i*0.4)/0.7); if(a<=0) return;
+    const y=200+i*92, mine=e.id==='yours';
+    const item=feed.items.find(x=>x.id===e.id);
+    g.save(); g.globalAlpha=a;
+    g.fillStyle=mine?'#16202a':'#12151a'; g.fillRect(80,y-30,1120,80);
+    if(mine){ g.strokeStyle=ACC; g.lineWidth=2; g.strokeRect(80,y-30,1120,80); }
+    if(item){ const c=bitmapToCanvas(item.bitmap); g.drawImage(c,96,y-22,112,63); }
+    txt(`${i+1}`,232,y+14,{size:24,color:FAINT,font:mono,alpha:a});
+    txt(mine?'your thumbnail':e.id,272,y+14,{size:21,weight:mine?700:400,color:mine?ACC:INK,alpha:a});
+    txt(`glance pull ${e.glancePull}`,900,y+6,{size:18,color:DIM,font:mono,align:'right',alpha:a});
+    txt(`oddity ${e.oddity}`,1180,y+6,{size:18,color:mine?ACC:FAINT,font:mono,align:'right',alpha:a});
+    g.restore();
+  });
+  txt('The same red that wins in a muted column loses in a red one — rank depends on the company you keep.',
+      80,660,{size:18,color:FAINT,alpha:ease((t-2.6)/1)});
+}
+
+function sceneClose(t){
+  bg();
+  const a=ease(t/0.8);
+  txt('ThumbProof',80,220,{size:64,weight:700,alpha:a});
+  const lines=[
+    ['Stroke Width Transform · spectral-residual saliency · Lanczos-3 · SSIM · WCAG 2.1',DIM],
+    ['Zero runtime dependencies. 267 tests. Nothing leaves your browser.',DIM],
+    ['Paste any YouTube link and it measures the real thumbnail.',INK],
+  ];
+  lines.forEach((l,i)=>txt(l[0],80,300+i*44,{size:24,color:l[1],alpha:ease((t-0.6-i*0.5)/0.8)}));
+  txt('moscraciunxxx.github.io/thumbproof',80,520,{size:34,color:ACC,weight:600,alpha:ease((t-2.4)/0.9)});
+  txt('Same pixels in, identical numbers out — on any machine.',80,600,{size:20,color:FAINT,alpha:ease((t-3)/0.9)});
+}
+
+const TIMELINE=[
+  {fn:sceneTitle, dur:5.5},
+  {fn:sceneWall,  dur:10},
+  {fn:sceneChecks,dur:8},
+  {fn:sceneRepair,dur:9},
+  {fn:sceneAdvice,dur:8},
+  {fn:sceneFeed,  dur:9},
+  {fn:sceneClose, dur:7},
+];
+const TOTAL=TIMELINE.reduce((a,s)=>a+s.dur,0);
+const FRAMES=Math.round(TOTAL*FPS);
+
+function drawAt(sec){
+  let acc=0;
+  for(const s of TIMELINE){
+    if(sec<acc+s.dur){ s.fn(sec-acc);
+      // 0.35s cross-cut fade at each boundary
+      const local=sec-acc, fade=0.35;
+      if(local<fade){ g.save(); g.globalAlpha=1-local/fade; g.fillStyle=BG; g.fillRect(0,0,W,H); g.restore(); }
+      if(s.dur-local<fade){ g.save(); g.globalAlpha=1-(s.dur-local)/fade; g.fillStyle=BG; g.fillRect(0,0,W,H); g.restore(); }
+      return; }
+    acc+=s.dur;
+  }
+  TIMELINE[TIMELINE.length-1].fn(TIMELINE[TIMELINE.length-1].dur);
+}
+
+log(`rendering ${FRAMES} frames (${TOTAL}s @ ${FPS}fps)…`);
+for(let i=0;i<FRAMES;i++){
+  drawAt(i/FPS);
+  const blob=await new Promise(r=>stage.toBlob(r,'image/jpeg',0.9));
+  await fetch(`http://127.0.0.1:8098/frame/${i}`,{method:'POST',body:blob});
+  if(i%24===0) log(`frame ${i}/${FRAMES}`);
+}
+log(`DONE ${FRAMES} frames, ${TOTAL}s`);
+window.__reel={frames:FRAMES,total:TOTAL,fps:FPS,
+  scores:{before:lc.rep.score,after:fixedRep.score}, realScore:real.rep.score,
+  variant:real.variant?.name??null, feedRank:feed?.result.candidateRank??null};
+</script></body></html>
