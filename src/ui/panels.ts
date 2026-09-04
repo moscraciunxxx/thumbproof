@@ -120,6 +120,8 @@ export function renderShelf(host: HTMLElement, shelf: ShelfReport): void {
       ));
     }
     table.append(body);
-    host.append(table);
+    // Scrolls inside its own container on narrow screens; the page must never
+    // scroll horizontally.
+    host.append(el('div', { class: 'shelf__wrap' }, table));
   }
 }

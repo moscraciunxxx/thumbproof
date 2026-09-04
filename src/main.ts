@@ -40,7 +40,53 @@ const nodes = {
   shelfStrip: mustGet('shelfStrip'),
   drop: mustGet<HTMLLabelElement>('drop'),
   file: mustGet<HTMLInputElement>('file'),
+  notice: mustGet('notice'),
 };
+
+/** Largest source we will decode. Beyond this, browsers start failing silently. */
+const MAX_FILE_BYTES = 32 * 1024 * 1024;
+
+function showNotice(title: string, body: string, kind: 'error' | 'info' = 'error'): void {
+  clear(nodes.notice);
+  nodes.notice.className = kind === 'info' ? 'notice notice--info' : 'notice';
+  nodes.notice.append(el('b', {}, title), document.createTextNode(body));
+  nodes.notice.hidden = false;
+}
+
+function hideNotice(): void {
+  nodes.notice.hidden = true;
+  clear(nodes.notice);
+}
+
+/**
+ * Every entry point funnels through here. A dropped file that is not a decodable
+ * image used to reject into the void: nothing rendered, nothing said, and an
+ * unhandled rejection in the console. Silence is the worst possible response to
+ * someone trying their own thumbnail.
+ */
+function loadUserFile(file: File): void {
+  hideNotice();
+
+  if (file.size > MAX_FILE_BYTES) {
+    showNotice('That file is too large to decode.',
+      ` ${(file.size / 1048576).toFixed(1)} MB exceeds the ${MAX_FILE_BYTES / 1048576} MB ceiling. Export your thumbnail at 1280x720 and try again — YouTube caps uploads at 2 MB from mobile anyway.`);
+    return;
+  }
+
+  if (file.type && !file.type.startsWith('image/')) {
+    showNotice('That is not an image.',
+      ` "${file.name}" is ${file.type}. Drop a PNG, JPG or WebP thumbnail.`);
+    return;
+  }
+
+  void fileToBitmap(file)
+    .then((b) => setImage(b, file.name))
+    .catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      showNotice('Could not decode that image.',
+        ` "${file.name}" did not load. It may be corrupt, or a format this browser cannot read. Original error: ${detail}`);
+    });
+}
 
 async function sampleToBitmap(s: Sample): Promise<Bitmap> {
   return normalizeTo16x9(await svgToImage(s.svg));
@@ -80,6 +126,15 @@ async function setImage(bitmap: Bitmap, label: string): Promise<void> {
     clear(nodes.repairWall);
     nodes.repairBtn.disabled = false;
     nodes.repairBtn.textContent = 'Repair & re-measure';
+
+    // A text-free thumbnail is a legitimate result, but the check list collapses to
+    // two rows and that reads like a failure. Say what happened instead.
+    const confident = report.textRegions.filter((r) => r.confidence >= 0.5);
+    if (confident.length === 0) {
+      showNotice('No text detected in this thumbnail.',
+        ' Legibility, contrast and badge-collision checks need text to measure, so they are omitted. If your thumbnail does have a headline, it may be too stylised for stroke-width detection to segment — the diagnostic panel shows exactly what was found.',
+        'info');
+    }
 
     renderShelfPanel(bitmap, label);
   } finally {
@@ -155,7 +210,10 @@ function buildSampleChips(): void {
         other.setAttribute('aria-pressed', 'false');
       }
       chip.setAttribute('aria-pressed', 'true');
-      void sampleToBitmap(s).then((b) => setImage(b, s.id));
+      hideNotice();
+      void sampleToBitmap(s)
+        .then((b) => setImage(b, s.id))
+        .catch(() => showNotice('Could not render that sample.', ' Reload the page and try again.'));
     });
     nodes.samples.append(chip);
   }
@@ -164,7 +222,7 @@ function buildSampleChips(): void {
 function wireDropZone(): void {
   nodes.file.addEventListener('change', () => {
     const f = nodes.file.files?.[0];
-    if (f) void fileToBitmap(f).then((b) => setImage(b, f.name));
+    if (f) loadUserFile(f);
   });
 
   for (const type of ['dragenter', 'dragover'] as const) {
@@ -179,14 +237,14 @@ function wireDropZone(): void {
   nodes.drop.addEventListener('drop', (e) => {
     e.preventDefault();
     const f = e.dataTransfer?.files?.[0];
-    if (f) void fileToBitmap(f).then((b) => setImage(b, f.name));
+    if (f) loadUserFile(f);
   });
 
   // Paste straight from a design tool — the fastest path for a real creator.
   window.addEventListener('paste', (e) => {
     const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith('image/'));
     const f = item?.getAsFile();
-    if (f) void fileToBitmap(f).then((b) => setImage(b, 'pasted image'));
+    if (f) loadUserFile(f);
   });
 }
 
