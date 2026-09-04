@@ -62,7 +62,7 @@ dHash. Stacked in a sidebar they read as one video.
 | Full analysis, 1280×720, visible tab | **~250 ms** on-device |
 | First-paint payload, gzipped | **26.4 KB** (18.2 KB core + 4.1 KB app + 2.7 KB CSS + 2.0 KB HTML) |
 | Runtime dependencies | **0** |
-| Unit tests | **122 passing**, `tsc --noEmit` clean |
+| Unit tests | **137 passing**, `tsc --noEmit` clean |
 
 ## Detector sanity — reported cap heights against the fonts that drew them
 
@@ -112,6 +112,22 @@ artifacts nudge fine text edges and change how the subtitle line is segmented.
 
 This is inherent to any banded score and it is why the per-check numbers, not the
 headline score, are the ground truth. Read the rows.
+
+## The interface passes the standard it enforces
+
+A tool that fails other people's thumbnails at 1.39:1 cannot ship text that fails
+WCAG itself. Every foreground/background pair in the UI is audited by
+`tests/palette.test.ts`, using the project's own `contrastRatio()` rather than a
+second implementation that could drift from the number users are shown.
+
+The audit found one real failure: `--ink-3`, the fine-print colour used for the line
+under the score, measured **3.96:1 on cards** — below the 4.5:1 floor, on 11.5 px
+monospace text that is unambiguously "normal", not "large". Raised from `#6b7684` to
+`#7b8593`, now **4.89:1 on cards** and **5.21:1 on the page**, with the three text
+tiers still visually distinct. A regression test pins the old value as failing so it
+cannot quietly come back.
+
+All twelve pairs now clear 4.5:1.
 
 ## Determinism, verified
 

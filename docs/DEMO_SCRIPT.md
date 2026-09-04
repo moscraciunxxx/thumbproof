@@ -72,7 +72,7 @@ tiles get smaller. Do not scroll fast.)*
 > "It runs entirely in your browser. No upload, no account, no API key, no model
 > weights — twenty-six kilobytes and zero dependencies. The hash under the score is of
 > the exact pixels measured, so the same image always gives the same numbers. A
-> hundred and twenty-two tests, and a self-test page that re-runs all six samples
+> hundred and thirty-seven tests, and a self-test page that re-runs all six samples
 > live. Source is on GitHub."
 
 *(Optional last shot, 2s: `/selftest.html` showing **6/6 samples land on their

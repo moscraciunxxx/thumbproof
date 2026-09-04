@@ -100,7 +100,7 @@ end to end. Same pixels in, bit-identical numbers out, on any machine. The FNV-1
 fingerprint printed under the score is of the exact pixels measured, so any result in
 the demo can be reproduced.
 
-Static site, no backend, no telemetry. **122 unit tests**, clean `tsc --noEmit`, **zero
+Static site, no backend, no telemetry. **137 unit tests**, clean `tsc --noEmit`, **zero
 runtime dependencies**, **26.4 KB gzipped** on first paint. Deployed to GitHub Pages via
 Actions, which typechecks and runs the suite before it will publish.
 
@@ -139,6 +139,11 @@ so it looks perfectly consistent. Two fixes: merge both polarities instead of pi
 (thumbnails routinely mix dark and light type), and score a solitary component neutrally
 so group support carries the weight. Reported cap heights are now within a few per cent
 of the fonts that drew them.
+
+**The interface failed its own test.** Auditing the UI palette with the project's own
+`contrastRatio()` — because a tool that fails thumbnails at 1.39:1 shipping inaccessible
+text of its own would be indefensible — found the fine-print colour at 3.96:1 on cards,
+under the 4.5:1 floor, on 11.5 px text. Fixed and pinned with a regression test.
 
 **Three more bugs that only surfaced by actually running it.** Boot awaited
 `requestAnimationFrame`, which never fires in a background tab, so opening the link in a
