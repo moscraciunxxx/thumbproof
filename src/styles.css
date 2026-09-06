@@ -471,3 +471,16 @@ details[open] .model__summary span::before { content: '▾ '; }
   .top__actions { width: 100%; }
   .btn--accent { width: 100%; }
 }
+
+
+/* --- variants as step 2 --- */
+.panel--ab .drop--ab {
+  display: block;
+  margin-top: 12px;
+  padding: 18px 16px;
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 55%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-1));
+}
+.panel--ab .drop--ab:hover { border-color: var(--accent); }
+.abOut .ab__rank { font-weight: 700; color: var(--accent); }

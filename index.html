@@ -48,9 +48,22 @@
     </div>
   </section>
 
+  
+  <section class="panel panel--ab" aria-labelledby="ab-h">
+    <div class="panel__head">
+      <h2 id="ab-h">2. Pick the survivor</h2>
+      <p><b>Before you upload,</b> drop 2–4 thumbnail candidates. They are ranked by what survives the 168&nbsp;px sidebar — not what looks best at full size. Winner first.</p>
+      <label class="drop drop--ab" id="abDrop">
+        <input type="file" id="abFile" accept="image/*" multiple hidden />
+        <span class="drop__text"><b>Drop 2–4 variants</b><span>ranked for delivery survival · never leaves this machine</span></span>
+      </label>
+    </div>
+    <div id="abOut" class="abOut"></div>
+  </section>
+
   <section class="panel panel--cta" aria-label="Quick actions">
     <div class="cta">
-      <p class="cta__lead"><b>2.</b> Read the score → <b>3.</b> Repair if it fails → keep the PNG + JSON.</p>
+      <p class="cta__lead"><b>3.</b> Read the score on a single pick → <b>4.</b> Repair if it fails → download PNG + JSON.</p>
       <div class="cta__row">
         <button id="repair" class="btn btn--accent" type="button">Repair &amp; re-measure</button>
         <div id="downloads" class="downloads"></div>
@@ -59,18 +72,6 @@
   </section>
 
   
-  <section class="panel" aria-labelledby="ab-h">
-    <div class="panel__head">
-      <h2 id="ab-h">4. Pick between variants</h2>
-      <p>Drop 2–4 candidates — ranked by what survives delivery, not what looks strongest at full size.</p>
-      <label class="drop drop--sm" id="abDrop">
-        <input type="file" id="abFile" accept="image/*" multiple hidden />
-        <span class="drop__text"><b>Drop 2–4 variants</b><span>or click to choose · compared side by side at true size</span></span>
-      </label>
-    </div>
-    <div id="abOut"></div>
-  </section>
-
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
   <section class="panel" aria-labelledby="wall-h">

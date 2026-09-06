@@ -369,7 +369,7 @@ function wireYouTube(): void {
 async function runCompare(files: File[]): Promise<void> {
   clear(nodes.abOut);
   if (files.length < 2) {
-    nodes.abOut.append(el('p', { class: 'advice__none' }, 'Drop at least two variants to compare.'));
+    nodes.abOut.append(el('p', { class: 'advice__none' }, 'Drop at least two variants — #1 is the one that survives delivery.'));
     return;
   }
   document.body.classList.add('busy');
@@ -391,7 +391,7 @@ async function runCompare(files: File[]): Promise<void> {
       const fails = r.report.checks.filter((c) => c.status === 'fail');
       card.append(
         el('figcaption', { class: 'ab__head' },
-          el('span', { class: 'ab__rank' }, i === 0 ? 'Best' : `#${i + 1}`),
+          el('span', { class: 'ab__rank' }, i === 0 ? 'Upload this — survives delivery' : `#${i + 1}`),
           el('span', { class: 'ab__name' }, r.name),
           el('span', { class: `ab__score ab__score--${band}` }, String(r.report.score)),
         ),
