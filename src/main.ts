@@ -38,6 +38,7 @@ const nodes = {
   checks: mustGet<HTMLUListElement>('checks'),
   diagnostic: mustGet('diagnostic'),
   repairBtn: mustGet<HTMLButtonElement>('repair'),
+  repairTop: mustGet<HTMLButtonElement>('repairTop'),
   repairOut: mustGet('repairOut'),
   repairWall: mustGet('repairWall'),
   shelf: mustGet('shelf'),
@@ -141,7 +142,9 @@ async function setImage(bitmap: Bitmap, label: string): Promise<void> {
     clear(nodes.repairOut);
     clear(nodes.repairWall);
     nodes.repairBtn.disabled = false;
+    nodes.repairTop.disabled = false;
     nodes.repairBtn.textContent = 'Repair & re-measure';
+    nodes.repairTop.textContent = 'Repair & re-measure';
 
     // A text-free thumbnail is a legitimate result, but the check list collapses to
     // two rows and that reads like a failure. Say what happened instead.
@@ -292,7 +295,9 @@ function onRepair(): void {
       state.report = after;
       renderShelfPanel(result.bitmap, state.label);
       nodes.repairBtn.disabled = true;
+      nodes.repairTop.disabled = true;
       nodes.repairBtn.textContent = 'Repaired';
+      nodes.repairTop.textContent = 'Repaired';
     } finally {
       document.body.classList.remove('busy');
     }
@@ -501,6 +506,7 @@ async function boot(): Promise<void> {
   wireCompare();
   wireFeed();
   nodes.repairBtn.addEventListener('click', onRepair);
+  nodes.repairTop.addEventListener('click', onRepair);
 
   // A ?v= permalink reproduces a result exactly, so honour it before the sample.
   const shared = new URL(window.location.href).searchParams.get('v');
